@@ -655,13 +655,6 @@ class MicKeeper: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
         }
     }
 
-    func signalShutdown() {
-        // Skip stopRunning() here: it can deadlock on Bluetooth devices, and
-        // _exit(0) follows immediately so the OS reclaims all resources.
-        session = nil
-        cleanupPID()
-    }
-
     func shutdown() {
         debounceWork?.cancel()
         stopHeartbeat()
@@ -677,18 +670,35 @@ class MicKeeper: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
 
 let keeper = MicKeeper()
 
+// Handle SIGTERM/SIGINT on the main queue instead of in a signal handler.
+//
+// A C signal handler runs on whatever thread the kernel picks. If that is a
+// CoreMediaIO worker thread waiting on a FigSemaphore, releasing the
+// AVCaptureSession from the handler deadlocks: its dealloc stops the CMIO
+// graph, which spins in FigSemaphoreDestroy waiting for the very thread the
+// handler interrupted. The process then burns 100% CPU and never exits.
+//
+// So the handler does nothing but wake the main queue, and the main queue
+// exits without touching the session. Process exit reclaims the capture
+// session and the mic. If the main queue is ever wedged, launchd still
+// SIGKILLs the process after its exit timeout.
+var signalSources: [DispatchSourceSignal] = []
+
 func installSignalHandlers() {
-    let handler: @convention(c) (Int32) -> Void = { sig in
-        signal(SIGTERM, SIG_DFL)
-        signal(SIGINT, SIG_DFL)
-        keeper.signalShutdown()
-        _exit(0)
+    for sig in [SIGTERM, SIGINT] {
+        signal(sig, SIG_IGN)  // let the dispatch source receive it instead
+        let source = DispatchSource.makeSignalSource(signal: sig, queue: .main)
+        source.setEventHandler {
+            log("Received \(sig == SIGTERM ? "SIGTERM" : "SIGINT"), exiting")
+            cleanupPID()
+            _exit(0)
+        }
+        source.resume()
+        signalSources.append(source)
     }
-    signal(SIGTERM, handler)
-    signal(SIGINT, handler)
 }
 
 installSignalHandlers()
-log("mic-warm starting (PID: \(ProcessInfo.processInfo.processIdentifier), version: 0.9.3-lab3)")
+log("mic-warm starting (PID: \(ProcessInfo.processInfo.processIdentifier), version: 0.9.3-lab3.1)")
 keeper.start()
 dispatchMain()

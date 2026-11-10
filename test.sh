@@ -45,8 +45,7 @@ setup() {
 
 teardown() {
     if [ -n "$TEST_PID" ] && kill -0 "$TEST_PID" 2>/dev/null; then
-        kill "$TEST_PID" 2>/dev/null || true
-        wait "$TEST_PID" 2>/dev/null || true
+        stop_and_wait TERM || true
     fi
     TEST_PID=""
 
@@ -64,6 +63,28 @@ teardown() {
 start_binary() {
     "$BINARY" > "$TEST_DIR/output.log" 2>&1 &
     TEST_PID=$!
+}
+
+# Send a signal and wait up to 5s for the binary to exit. If it is still
+# alive (e.g. deadlocked in shutdown), SIGKILL it and fail instead of
+# hanging the whole suite on `wait`.
+stop_and_wait() {
+    local sig="$1"
+    kill "-$sig" "$TEST_PID" 2>/dev/null || true
+    local i=0
+    while [ "$i" -lt 50 ]; do
+        if ! kill -0 "$TEST_PID" 2>/dev/null; then
+            wait "$TEST_PID" 2>/dev/null || true
+            return 0
+        fi
+        sleep 0.1
+        i=$((i + 1))
+    done
+    echo ""
+    echo "  Binary did not exit within 5s of SIG$sig; sending SIGKILL"
+    kill -KILL "$TEST_PID" 2>/dev/null || true
+    wait "$TEST_PID" 2>/dev/null || true
+    return 1
 }
 
 wait_for_log() {
@@ -135,11 +156,10 @@ test_clean_shutdown_sigterm() {
     start_binary
     wait_for_log "Keeping warm:" || return 1
 
-    kill -TERM "$TEST_PID"
-    wait "$TEST_PID" 2>/dev/null || true
+    stop_and_wait TERM || return 1
+    TEST_PID=""
 
-    # Signal handler uses _exit(0) without logging (signal-safe),
-    # so we verify clean shutdown by checking the PID file was removed.
+    assert_log "Received SIGTERM, exiting" || return 1
     [ ! -f "$PID_FILE" ] || { echo "  PID file not cleaned up"; return 1; }
 }
 
@@ -147,9 +167,10 @@ test_clean_shutdown_sigint() {
     start_binary
     wait_for_log "Keeping warm:" || return 1
 
-    kill -INT "$TEST_PID"
-    wait "$TEST_PID" 2>/dev/null || true
+    stop_and_wait INT || return 1
+    TEST_PID=""
 
+    assert_log "Received SIGINT, exiting" || return 1
     [ ! -f "$PID_FILE" ] || { echo "  PID file not cleaned up"; return 1; }
 }
 
