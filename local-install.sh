@@ -28,6 +28,7 @@ launchctl unload "$PLIST_PATH" 2>/dev/null || true
 
 mkdir -p "$BIN_DIR" "$(dirname "$PLIST_PATH")" "$(dirname "$LOG_PATH")"
 install -m 755 "$BUILT" "$BIN_PATH"
+install -m 755 "$SCRIPT_DIR/mic-warmctl" "$BIN_DIR/mic-warmctl"
 
 # Ad-hoc code sign so macOS TCC tracks a stable identity.
 codesign --force --sign - "$BIN_PATH"
@@ -55,6 +56,8 @@ cat > "$PLIST_PATH" << EOF
 </plist>
 EOF
 
+# Clear any "mic-warmctl stop" override; installing means you want it on.
+launchctl enable "gui/$(id -u)/com.user.keep-mic-warm"
 launchctl load "$PLIST_PATH"
 
 echo ""
@@ -63,4 +66,5 @@ echo "macOS will prompt you to grant mic-warm microphone access."
 echo "Allow it in System Settings > Privacy & Security > Microphone."
 echo ""
 echo "Log file: $LOG_PATH"
+echo "Stop/start:   mic-warmctl stop | mic-warmctl start | mic-warmctl status"
 echo "To uninstall: ./uninstall.sh"

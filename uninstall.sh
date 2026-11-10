@@ -24,3 +24,6 @@ if [ -f "$HOME/.local/bin/mic-warm" ]; then
     rm -f "$HOME/.local/bin/mic-warm"
     echo "Removed mic-warm binary."
 fi
+rm -f "$HOME/.local/bin/mic-warmctl"
+# Drop the launchd override left by "mic-warmctl stop", if any.
+launchctl enable "gui/$(id -u)/com.user.keep-mic-warm" 2>/dev/null || true

@@ -111,6 +111,17 @@ git diff master upstream/master
 
 Merge only what you have reviewed, then re-run `./local-install.sh`. The script re-signs the binary and reloads the LaunchAgent. Don't replace the binary manually, as macOS tracks microphone permissions by code signature and will silently reject an unsigned replacement.
 
+### Stop and start
+
+`local-install.sh` also installs `mic-warmctl` to `~/.local/bin`:
+
+```bash
+mic-warmctl stop      # stop it and keep it off, including after login
+mic-warmctl start     # start it and run it at login again
+mic-warmctl restart   # restart the running agent
+mic-warmctl status    # running or stopped, and which mic it holds
+```
+
 ### Uninstall
 
 ```bash
