@@ -145,10 +145,6 @@ Run the integration test suite to verify process lifecycle, signal handling, and
 
 Device-switching tests require real audio hardware and should be done manually.
 
-## Legacy Shell Script
-
-The original `keep-mic-warm.sh` is kept as a fallback for systems where the native binary can't be used. It requires `ffmpeg` and `switchaudio-osx` from Homebrew. See the file header for details.
-
 ## License
 
 MIT
