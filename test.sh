@@ -10,6 +10,7 @@ BINARY=""
 TEST_PID=""
 PASS=0
 FAIL=0
+PID_FILE="$HOME/Library/Caches/mic-warm.pid"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -19,18 +20,14 @@ RESET='\033[0m'
 # ── Build ────────────────────────────────────────────────────────
 
 build_if_needed() {
-    local debug_bin="$SCRIPT_DIR/.build/debug/mic-warm"
-    local release_bin="$SCRIPT_DIR/.build/apple/Products/Release/mic-warm"
-
-    # Prefer existing release binary (CI), fall back to debug build
-    if [ -f "$release_bin" ]; then
-        BINARY="$release_bin"
-        return
-    fi
+    # Ask SwiftPM for the output folder; it moved from .build/debug to
+    # .build/out/Products/Debug in newer toolchains.
+    local debug_bin
+    debug_bin="$(cd "$SCRIPT_DIR" && swift build --show-bin-path)/mic-warm"
 
     if [ ! -f "$debug_bin" ] || [ "$SCRIPT_DIR/Sources/MicWarm/main.swift" -nt "$debug_bin" ]; then
         echo "Building mic-warm..."
-        (cd "$SCRIPT_DIR" && swift build 2>&1) || {
+        (cd "$SCRIPT_DIR" && swift build --disable-automatic-resolution 2>&1) || {
             echo -e "${RED}Build failed${RESET}"
             exit 1
         }
@@ -54,7 +51,7 @@ teardown() {
     TEST_PID=""
 
     # Clean up PID file if tests used the default path
-    rm -f /tmp/mic-warm.pid
+    rm -f "$PID_FILE"
 
     if [ -n "$TEST_DIR" ]; then
         rm -rf "$TEST_DIR"
@@ -128,9 +125,9 @@ test_pid_file_created() {
     start_binary
     wait_for_log "Keeping warm:" || return 1
 
-    [ -f /tmp/mic-warm.pid ] || { echo "  PID file not created"; return 1; }
+    [ -f "$PID_FILE" ] || { echo "  PID file not created"; return 1; }
     local file_pid
-    file_pid=$(cat /tmp/mic-warm.pid)
+    file_pid=$(cat "$PID_FILE")
     [ "$file_pid" = "$TEST_PID" ] || { echo "  PID mismatch: file=$file_pid actual=$TEST_PID"; return 1; }
 }
 
@@ -143,7 +140,7 @@ test_clean_shutdown_sigterm() {
 
     # Signal handler uses _exit(0) without logging (signal-safe),
     # so we verify clean shutdown by checking the PID file was removed.
-    [ ! -f /tmp/mic-warm.pid ] || { echo "  PID file not cleaned up"; return 1; }
+    [ ! -f "$PID_FILE" ] || { echo "  PID file not cleaned up"; return 1; }
 }
 
 test_clean_shutdown_sigint() {
@@ -153,7 +150,7 @@ test_clean_shutdown_sigint() {
     kill -INT "$TEST_PID"
     wait "$TEST_PID" 2>/dev/null || true
 
-    [ ! -f /tmp/mic-warm.pid ] || { echo "  PID file not cleaned up"; return 1; }
+    [ ! -f "$PID_FILE" ] || { echo "  PID file not cleaned up"; return 1; }
 }
 
 test_logs_device_name() {
@@ -173,14 +170,14 @@ test_logs_device_name() {
 
 test_stale_pid_cleanup() {
     # Write a PID file pointing to a dead process
-    echo "99999" > /tmp/mic-warm.pid
+    echo "99999" > "$PID_FILE"
 
     start_binary
     wait_for_log "Keeping warm:" || return 1
 
     # PID file should now contain our process PID
     local file_pid
-    file_pid=$(cat /tmp/mic-warm.pid)
+    file_pid=$(cat "$PID_FILE")
     [ "$file_pid" = "$TEST_PID" ] || { echo "  PID not updated: $file_pid"; return 1; }
 }
 
@@ -189,7 +186,7 @@ test_stale_pid_cleanup_live_process() {
     sleep 300 &
     disown
     local stale_pid=$!
-    echo "$stale_pid" > /tmp/mic-warm.pid
+    echo "$stale_pid" > "$PID_FILE"
 
     start_binary
     wait_for_log "Killing stale process" || return 1

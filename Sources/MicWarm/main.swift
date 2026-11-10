@@ -149,7 +149,14 @@ func logAllDevices(prefix: String) {
 
 // MARK: - PID file
 
-let pidPath = "/tmp/mic-warm.pid"
+// Keep the PID file in the user's own Caches folder, not world-writable /tmp.
+// killStalePID() sends SIGTERM to whatever PID this file holds, so another
+// process must not be able to plant or symlink it.
+let pidPath: String = {
+    let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+        ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Caches")
+    return caches.appendingPathComponent("mic-warm.pid").path
+}()
 
 func writePID() {
     do {
@@ -682,6 +689,6 @@ func installSignalHandlers() {
 }
 
 installSignalHandlers()
-log("mic-warm starting (PID: \(ProcessInfo.processInfo.processIdentifier), version: 0.9.3)")
+log("mic-warm starting (PID: \(ProcessInfo.processInfo.processIdentifier), version: 0.9.3-lab3)")
 keeper.start()
 dispatchMain()

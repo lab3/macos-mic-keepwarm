@@ -14,6 +14,9 @@ else
     echo "mic-warm is not installed (no plist found)."
 fi
 
+rm -f "$HOME/Library/Caches/mic-warm.pid"
+rm -f "$HOME/Library/Logs/mic-warm.log"
+# Paths used by upstream releases before this fork moved them out of /tmp.
 rm -f /tmp/mic-warm.pid
 rm -f /tmp/mic-warm.log
 
