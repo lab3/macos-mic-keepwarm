@@ -2,6 +2,8 @@
 
 [![Apple Feedback](https://img.shields.io/badge/Apple_Feedback-Submitted_Feb_2026-orange)](APPLE_FEEDBACK.md)
 
+> **Fork notice:** This is `lab3`'s fork of [drewburchfield/macos-mic-keepwarm](https://github.com/drewburchfield/macos-mic-keepwarm), pinned to reviewed upstream v0.9.3. It builds from source only: the upstream installer and release workflow are removed, and the PID file lives in `~/Library/Caches` instead of `/tmp`. See [Installation](#installation).
+
 Fix the 2-5 second push-to-talk activation delay on macOS.
 
 If you use voice transcription apps like SuperWhisper, WhisperFlow, Wispr Flow, macOS Dictation, or any push-to-talk tool and experience a delay before recording starts, especially with AirPods or Bluetooth audio, this is for you.
@@ -60,7 +62,7 @@ A lightweight native Swift binary that holds the microphone input stream open. T
 
 ### Why native instead of ffmpeg?
 
-The previous approach used ffmpeg from Homebrew. It worked, but every `brew upgrade` moves ffmpeg to a new path (e.g. `8.0.1_2` to `8.0.1_3`). macOS TCC tracks mic permissions by binary path for unsigned binaries, so every upgrade silently breaks the mic permission. You get the push-to-talk delay back with no indication why. The native binary lives at `~/.local/bin/mic-warm` with ad-hoc code signing, so the permission grant is stable. If upgrading from the ffmpeg version, the installer handles migration automatically.
+The previous approach used ffmpeg from Homebrew. It worked, but every `brew upgrade` moves ffmpeg to a new path (e.g. `8.0.1_2` to `8.0.1_3`). macOS TCC tracks mic permissions by binary path for unsigned binaries, so every upgrade silently breaks the mic permission. You get the push-to-talk delay back with no indication why. The native binary lives at `~/.local/bin/mic-warm` with ad-hoc code signing, so the permission grant is stable. If you used the ffmpeg version, `./local-install.sh` unloads and replaces its LaunchAgent, which uses the same plist path.
 
 ### How It Works
 
@@ -80,28 +82,40 @@ When you connect or disconnect AirPods, a Bluetooth headset, or any audio device
 
 ## Installation
 
+This fork builds from source only. It publishes no release binaries and has no `curl | bash` installer. Requires the Xcode Command Line Tools (`swift`).
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/drewburchfield/macos-mic-keepwarm/master/install.sh | bash
+git clone https://github.com/lab3/macos-mic-keepwarm.git
+cd macos-mic-keepwarm
+./local-install.sh
 ```
 
-This downloads a precompiled universal binary (ARM + Intel), installs it to `~/.local/bin/mic-warm`, and creates a LaunchAgent that:
+`local-install.sh` compiles the checked-out source, installs the binary to `~/.local/bin/mic-warm`, ad-hoc signs it, and creates a LaunchAgent that:
 - Starts automatically on login
 - Restarts automatically if killed
 - Runs silently in the background
 
 macOS will prompt you to grant mic-warm microphone access. Go to System Settings > Privacy & Security > Microphone and allow it.
 
+Logs go to `~/Library/Logs/mic-warm.log`. The PID file is `~/Library/Caches/mic-warm.pid`.
+
 ### Upgrade
 
-To upgrade, re-run the install command. The script re-signs the binary and reloads the LaunchAgent. Don't replace the binary manually, as macOS tracks microphone permissions by code signature and will silently reject an unsigned replacement.
+Review upstream changes before taking them:
+
+```bash
+git fetch upstream
+git log --oneline master..upstream/master
+git diff master upstream/master
+```
+
+Merge only what you have reviewed, then re-run `./local-install.sh`. The script re-signs the binary and reloads the LaunchAgent. Don't replace the binary manually, as macOS tracks microphone permissions by code signature and will silently reject an unsigned replacement.
 
 ### Uninstall
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/drewburchfield/macos-mic-keepwarm/master/uninstall.sh | bash
+./uninstall.sh
 ```
-
-Or clone the repo and run `./uninstall.sh`.
 
 ## The Orange Dot
 
@@ -130,10 +144,6 @@ Run the integration test suite to verify process lifecycle, signal handling, and
 ```
 
 Device-switching tests require real audio hardware and should be done manually.
-
-## Legacy Shell Script
-
-The original `keep-mic-warm.sh` is kept as a fallback for systems where the native binary can't be used. It requires `ffmpeg` and `switchaudio-osx` from Homebrew. See the file header for details.
 
 ## License
 
